@@ -1,5 +1,5 @@
 {
-  "name": "mobx-react-lite",
+  "name": "@textshq/mobx-react-lite",
   "version": "2.2.2",
   "description": "Lightweight React bindings for MobX based on React 16.8+ and Hooks",
   "main": "lib/index.js",

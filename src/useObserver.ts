@@ -3,11 +3,10 @@ import React from "react"
 
 import { printDebugValue } from "./printDebugValue"
 import {
-    createTrackingData,
+    addReactionToTrack,
     IReactionTracking,
-    recordReactionAsCommitted,
-    scheduleCleanupOfReactionIfLeaked
-} from "./reactionCleanupTracking"
+    recordReactionAsCommitted
+} from "./utils/reactionCleanupTracking"
 import { isUsingStaticRendering } from "./staticRendering"
 import { useForceUpdate } from "./utils"
 import { useQueuedForceUpdate, useQueuedForceUpdateBlock } from "./useQueuedForceUpdate"
@@ -24,6 +23,11 @@ function observerComponentNameFor(baseComponentName: string) {
     return `observer${baseComponentName}`
 }
 
+/**
+ * We use class to make it easier to detect in heap snapshots by name
+ */
+class ObjectToBeRetainedByReact {}
+
 export function useObserver<T>(
     fn: () => T,
     baseComponentName: string = "observed",
@@ -32,6 +36,8 @@ export function useObserver<T>(
     if (isUsingStaticRendering()) {
         return fn()
     }
+
+    const [objectRetainedByReact] = React.useState(new ObjectToBeRetainedByReact())
 
     const wantedForceUpdateHook = options.useForceUpdate || useForceUpdate
     const forceUpdate = wantedForceUpdateHook()
@@ -64,9 +70,11 @@ export function useObserver<T>(
             }
         })
 
-        const trackingData = createTrackingData(newReaction)
-        reactionTrackingRef.current = trackingData
-        scheduleCleanupOfReactionIfLeaked(reactionTrackingRef)
+        const trackingData = addReactionToTrack(
+            reactionTrackingRef,
+            newReaction,
+            objectRetainedByReact
+        )
     }
 
     const { reaction } = reactionTrackingRef.current!
@@ -94,6 +102,8 @@ export function useObserver<T>(
                     // We've definitely already been mounted at this point
                     queuedForceUpdate()
                 }),
+                mounted: true,
+                changedBeforeMount: false,
                 cleanAt: Infinity
             }
             queuedForceUpdate()

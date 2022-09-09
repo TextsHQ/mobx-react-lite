@@ -1,6 +1,6 @@
 {
   "name": "@textshq/mobx-react-lite",
-  "version": "2.2.2",
+  "version": "1.0.0",
   "description": "Lightweight React bindings for MobX based on React 16.8+ and Hooks",
   "main": "lib/index.js",
   "unpkg": "dist/mobxreactlite.umd.production.min.js",
@@ -11,7 +11,7 @@
   "types": "dist/index.d.ts",
   "repository": {
     "type": "git",
-    "url": "https://github.com/mobxjs/mobx-react-lite.git"
+    "url": "https://github.com/TextsHQ/mobx-react-lite.git"
   },
   "files": [
     "dist/",
@@ -37,7 +37,7 @@
   "author": "Daniel K.",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/mobxjs/mobx-react-lite/issues"
+    "url": "https://github.com/TextsHQ/mobx-react-lite/issues"
   },
   "homepage": "https://mobx-react.js.org",
   "peerDependencies": {

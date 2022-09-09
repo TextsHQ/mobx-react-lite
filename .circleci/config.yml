@@ -3,12 +3,10 @@ version: 2.1
 executors:
     my-executor:
         docker:
-            - image: circleci/node:14
+            - image: circleci/node:11
               environment:
                   CI: "yes"
-
-orbs:
-    node: circleci/node@4.0.1
+        working_directory: ~/mobx-react-lite
 
 jobs:
     # mobx-react build
@@ -17,8 +15,29 @@ jobs:
         steps:
             - checkout
 
-            - node/install-packages:
-                pkg-manager: yarn
+            - restore_cache:
+                  name: restore .cache/yarn
+                  keys:
+                      - yarn-cache-{{ arch }}
+            - restore_cache:
+                  name: restore node_modules
+                  keys:
+                      - node-modules-{{ arch }}-{{ .Branch }}-{{ checksum "yarn.lock" }}
+                      - node-modules-{{ arch }}-{{ .Branch }}
+                      - node-modules-{{ arch }}
+
+            - run: yarn install --frozen-lockfile --cache-folder ~/.cache/yarn
+
+            - save_cache:
+                  name: cache .cache/yarn
+                  key: yarn-cache-{{ arch }}
+                  paths:
+                      - ~/.cache/yarn
+            - save_cache:
+                  name: cache node_modules
+                  key: node-modules-{{ arch }}-{{ .Branch }}-{{ checksum "yarn.lock" }}
+                  paths:
+                      - node_modules
 
             - run: yarn build
 
@@ -72,7 +91,7 @@ jobs:
                       if [[ -v COVERALLS_REPO_TOKEN ]]
                       then
                           cat ./coverage/lcov.info | ./node_modules/coveralls/bin/coveralls.js
-                          echo "Coveralls info uploaded..."
+                          echo "Coveralls info uploaded"
                       else
                           echo "Warning - Coveralls info could NOT be uploaded since the COVERALLS_REPO_TOKEN was not available"
                       fi

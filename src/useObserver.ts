@@ -1,32 +1,41 @@
 import { Reaction } from "mobx"
 import React from "react"
 
-import { printDebugValue } from "./utils/printDebugValue"
+import { printDebugValue } from "./printDebugValue"
 import {
-    addReactionToTrack,
+    createTrackingData,
     IReactionTracking,
-    recordReactionAsCommitted
-} from "./utils/reactionCleanupTracking"
+    recordReactionAsCommitted,
+    scheduleCleanupOfReactionIfLeaked
+} from "./reactionCleanupTracking"
 import { isUsingStaticRendering } from "./staticRendering"
-import { useForceUpdate } from "./utils/utils"
+import { useForceUpdate } from "./utils"
+import { useQueuedForceUpdate, useQueuedForceUpdateBlock } from "./useQueuedForceUpdate"
+
+export type ForceUpdateHook = () => () => void
+
+export interface IUseObserverOptions {
+    useForceUpdate?: ForceUpdateHook
+}
+
+const EMPTY_OBJECT = {}
 
 function observerComponentNameFor(baseComponentName: string) {
     return `observer${baseComponentName}`
 }
 
-/**
- * We use class to make it easier to detect in heap snapshots by name
- */
-class ObjectToBeRetainedByReact {}
-
-export function useObserver<T>(fn: () => T, baseComponentName: string = "observed"): T {
+export function useObserver<T>(
+    fn: () => T,
+    baseComponentName: string = "observed",
+    options: IUseObserverOptions = EMPTY_OBJECT
+): T {
     if (isUsingStaticRendering()) {
         return fn()
     }
 
-    const [objectRetainedByReact] = React.useState(new ObjectToBeRetainedByReact())
-
-    const forceUpdate = useForceUpdate()
+    const wantedForceUpdateHook = options.useForceUpdate || useForceUpdate
+    const forceUpdate = wantedForceUpdateHook()
+    const queuedForceUpdate = useQueuedForceUpdate(forceUpdate)
 
     // StrictMode/ConcurrentMode/Suspense may mean that our component is
     // rendered and abandoned multiple times, so we need to track leaked
@@ -45,19 +54,19 @@ export function useObserver<T>(fn: () => T, baseComponentName: string = "observe
             // (It triggers warnings in StrictMode, for a start.)
             if (trackingData.mounted) {
                 // We have reached useEffect(), so we're mounted, and can trigger an update
-                forceUpdate()
+                queuedForceUpdate()
             } else {
                 // We haven't yet reached useEffect(), so we'll need to trigger a re-render
-                // when (and if) useEffect() arrives.
-                trackingData.changedBeforeMount = true
+                // when (and if) useEffect() arrives.  The easiest way to do that is just to
+                // drop our current reaction and allow useEffect() to recreate it.
+                newReaction.dispose()
+                reactionTrackingRef.current = null
             }
         })
 
-        const trackingData = addReactionToTrack(
-            reactionTrackingRef,
-            newReaction,
-            objectRetainedByReact
-        )
+        const trackingData = createTrackingData(newReaction)
+        reactionTrackingRef.current = trackingData
+        scheduleCleanupOfReactionIfLeaked(reactionTrackingRef)
     }
 
     const { reaction } = reactionTrackingRef.current!
@@ -72,28 +81,22 @@ export function useObserver<T>(fn: () => T, baseComponentName: string = "observe
             // all we need to do is to record that it's now mounted,
             // to allow future observable changes to trigger re-renders
             reactionTrackingRef.current.mounted = true
-            // Got a change before first mount, force an update
-            if (reactionTrackingRef.current.changedBeforeMount) {
-                reactionTrackingRef.current.changedBeforeMount = false
-                forceUpdate()
-            }
         } else {
             // The reaction we set up in our render has been disposed.
-            // This can be due to bad timings of renderings, e.g. our
+            // This is either due to bad timings of renderings, e.g. our
             // component was paused for a _very_ long time, and our
-            // reaction got cleaned up
+            // reaction got cleaned up, or we got a observable change
+            // between render and useEffect
 
             // Re-create the reaction
             reactionTrackingRef.current = {
                 reaction: new Reaction(observerComponentNameFor(baseComponentName), () => {
                     // We've definitely already been mounted at this point
-                    forceUpdate()
+                    queuedForceUpdate()
                 }),
-                mounted: true,
-                changedBeforeMount: false,
                 cleanAt: Infinity
             }
-            forceUpdate()
+            queuedForceUpdate()
         }
 
         return () => {
@@ -102,22 +105,25 @@ export function useObserver<T>(fn: () => T, baseComponentName: string = "observe
         }
     }, [])
 
-    // render the original component, but have the
-    // reaction track the observables, so that rendering
-    // can be invalidated (see above) once a dependency changes
-    let rendering!: T
-    let exception
-    reaction.track(() => {
-        try {
-            rendering = fn()
-        } catch (e) {
-            exception = e
+    // delay all force-update calls after rendering of this component
+    return useQueuedForceUpdateBlock(() => {
+        // render the original component, but have the
+        // reaction track the observables, so that rendering
+        // can be invalidated (see above) once a dependency changes
+        let rendering!: T
+        let exception
+        reaction.track(() => {
+            try {
+                rendering = fn()
+            } catch (e) {
+                exception = e
+            }
+        })
+
+        if (exception) {
+            throw exception // re-throw any exceptions caught during rendering
         }
+
+        return rendering
     })
-
-    if (exception) {
-        throw exception // re-throw any exceptions caught during rendering
-    }
-
-    return rendering
 }

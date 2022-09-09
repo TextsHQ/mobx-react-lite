@@ -1,6 +1,6 @@
 let globalIsUsingStaticRendering = false
 
-export function enableStaticRendering(enable: boolean) {
+export function useStaticRendering(enable: boolean) {
     globalIsUsingStaticRendering = enable
 }
 

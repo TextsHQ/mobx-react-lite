@@ -1,6 +1,6 @@
 {
-  "name": "@nikhilthota1/mobx-react-lite",
-  "version": "1.0.1",
+  "name": "@textshq/mobx-react-lite",
+  "version": "1.0.0",
   "description": "Lightweight React bindings for MobX based on React 16.8+ and Hooks",
   "main": "lib/index.js",
   "unpkg": "dist/mobxreactlite.umd.production.min.js",
@@ -28,6 +28,7 @@
     "size": "size-limit",
     "coverage": "jest --coverage",
     "prebuild": "rimraf dist lib es",
+    "prepack": "yarn build",
     "build": "yarn build:commonjs && yarn build:es && yarn build:umd",
     "build:commonjs": "tsc --project tsconfig.build.cjs.json",
     "build:es": "tsc --project tsconfig.build.es.json",
